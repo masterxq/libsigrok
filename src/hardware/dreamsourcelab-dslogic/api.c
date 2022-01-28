@@ -21,6 +21,7 @@
 #include <config.h>
 #include <math.h>
 #include "protocol.h"
+#include "stdio.h"
 
 static const struct dslogic_profile supported_device[] = {
 	/* DreamSourceLab DSLogic */
@@ -120,6 +121,7 @@ static gboolean is_plausible(const struct libusb_device_descriptor *des)
 
 static GSList *scan(struct sr_dev_driver *di, GSList *options)
 {
+	sr_err("Scan dslogic2\n");
 	struct drv_context *drvc;
 	struct dev_context *devc;
 	struct sr_dev_inst *sdi;

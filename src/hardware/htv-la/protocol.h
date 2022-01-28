@@ -30,6 +30,11 @@
 struct dev_context {
 };
 
+enum dslogic_edge_modes {
+	DS_EDGE_RISING,
+	DS_EDGE_FALLING,
+};
+
 SR_PRIV int htv_la_receive_data(int fd, int revents, void *cb_data);
 
 #endif
