@@ -411,6 +411,12 @@ src_libdrivers_la_SOURCES += \
 	src/hardware/hp-59306a/protocol.c \
 	src/hardware/hp-59306a/api.c
 endif
+if HW_HTV_LA
+src_libdrivers_la_SOURCES += \
+	src/hardware/htv-la/protocol.h \
+	src/hardware/htv-la/protocol.c \
+	src/hardware/htv-la/api.c
+endif
 if HW_HUNG_CHANG_DSO_2100
 src_libdrivers_la_SOURCES += \
 	src/hardware/hung-chang-dso-2100/protocol.h \
