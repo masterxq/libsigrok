@@ -23,6 +23,7 @@
 
 static struct sr_dev_driver htv_la_driver_info;
 
+
 static const uint32_t scanopts[] = {
 	SR_CONF_CONN,
 };
@@ -56,10 +57,6 @@ static const char *signal_edges[] = {
 	[DS_EDGE_FALLING] = "falling",
 };
 
-static const double thresholds[][2] = {
-	{ 0.7, 1.4 },
-	{ 1.4, 3.6 },
-};
 
 static const uint64_t samplerates[] = {
 	SR_KHZ(10),
@@ -83,25 +80,37 @@ static const uint64_t samplerates[] = {
 static GSList *scan(struct sr_dev_driver *di, GSList *options)
 {
 	struct drv_context *drvc;
-	struct dev_context *devc;
+// 	struct dev_context *devc;
 	struct sr_dev_inst *sdi;
-	struct sr_usb_dev_inst *usb;
+// 	struct sr_usb_dev_inst *usb;
 	struct sr_channel *ch;
 	struct sr_channel_group *cg;
 	struct sr_config *src;
-	const struct dslogic_profile *prof;
-	GSList *l, *devices, *conn_devices;
-	gboolean has_firmware;
-	struct libusb_device_descriptor des;
+// 	const struct dslogic_profile *prof;
+	GSList *l, *devices/*, *conn_devices*/;
+	struct libusb_device_descriptor dev_desc;
 	libusb_device **devlist;
 	struct libusb_device_handle *dev_handle;
-	int ret, i, j;
 	const char *conn;
 	char manufacturer[64], product[64], serial_num[64], connection_id[64];
 	char channel_name[16];
 
 	drvc = di->context;
 
+	
+	conn = NULL;
+	for (l = options; l; l = l->next) {
+		src = l->data;
+		switch (src->key) {
+		case SR_CONF_CONN:
+			conn = g_variant_get_string(src->data, NULL);
+			break;
+		}
+	}
+	if (conn)
+		sr_err("Conn: %s\n", conn);
+	
+	devices = NULL;
 	ssize_t cnt = libusb_get_device_list(drvc->sr_ctx->libusb_ctx, &devlist);
 	for(uint8_t i = 0; i < cnt; i++)
 	{
@@ -112,7 +121,7 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 		{
 			continue;
 		}
-		printf("vendor: 0x%X product: 0x%X\n", desc.idVendor, desc.idProduct);
+// 		printf("vendor: 0x%X product: 0x%X\n", desc.idVendor, desc.idProduct);
 		if(desc.idProduct == 0x1338 && desc.idVendor == 0x9999)
 		{
 			int ret = libusb_open(dev, &dev_handle);
@@ -122,10 +131,39 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 				libusb_free_device_list(devlist, 1);
 				return NULL;
 			}
+			libusb_get_device_descriptor(dev, &dev_desc);
+			libusb_get_string_descriptor_ascii(dev_handle, dev_desc.iSerialNumber, (unsigned char *)serial_num, 64);
+			libusb_get_string_descriptor_ascii(dev_handle, dev_desc.iManufacturer, (unsigned char *)manufacturer, 64);
+			libusb_get_string_descriptor_ascii(dev_handle, dev_desc.iProduct, (unsigned char *)product, 64);
+			printf("serial: %s, manufacturer: %s, product: %s\n", serial_num, manufacturer, product);
+			usb_get_port_path(dev, connection_id, sizeof(connection_id));
+			sdi = g_malloc0(sizeof(struct sr_dev_inst));
+			sdi->status = SR_ST_INITIALIZING;
+			sdi->serial_num = g_strdup(serial_num);
+			sdi->vendor = g_strdup(manufacturer);
+			sdi->model = g_strdup(product);
+			sdi->connection_id = g_strdup(connection_id);
+			
+			cg = g_malloc0(sizeof(struct sr_channel_group));
+			cg->name = g_strdup("Logic");
+			cg->channels = NULL;
+			for (int j = 0; j < 16; j++)
+			{
+				sprintf(channel_name, "%d", j);
+				ch = sr_channel_new(sdi, j, SR_CHANNEL_LOGIC, TRUE, channel_name);
+				cg->channels = g_slist_append(cg->channels, ch);
+			}
+			sdi->channel_groups = g_slist_append(NULL, cg);
+			sdi->priv = NULL;
+			sdi->inst_type = SR_INST_USB;
+			sdi->conn = sr_usb_dev_inst_new(libusb_get_bus_number(dev), libusb_get_device_address(dev), NULL);
+// 			sdi->priv = custom_data_ptr;
+			devices = g_slist_append(devices, sdi);
+			libusb_close(dev_handle);
 		}
 	}
 
-	libusb_close(dev_handle);
+	
 	libusb_free_device_list(devlist, 1);
 
 
@@ -191,9 +229,62 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 static int dev_open(struct sr_dev_inst *sdi)
 {
 	sr_err("open htv\n");
-	(void)sdi;
+	struct sr_dev_driver *di = sdi->driver;
+	struct sr_usb_dev_inst *usb;
+	int ret;
+	int64_t timediff_us, timediff_ms;
 
-	/* TODO: get handle from sdi->conn and open it. */
+
+	usb = sdi->conn;
+
+	/*
+	 * If the firmware was recently uploaded, wait up to MAX_RENUM_DELAY_MS
+	 * milliseconds for the FX2 to renumerate.
+	 */
+	ret = SR_ERR;
+
+// 	sr_info("Firmware upload was not needed.");
+// 	ret = htv_la_dev_open(sdi, di);
+// 
+// 
+// 	if (ret != SR_OK) {
+// 		sr_err("Unable to open device.");
+// 		return SR_ERR;
+// 	}
+// 
+// 	ret = libusb_claim_interface(usb->devhdl, USB_INTERFACE);
+// 	if (ret != 0) {
+// 		switch (ret) {
+// 		case LIBUSB_ERROR_BUSY:
+// 			sr_err("Unable to claim USB interface. Another "
+// 			       "program or driver has already claimed it.");
+// 			break;
+// 		case LIBUSB_ERROR_NO_DEVICE:
+// 			sr_err("Device has been disconnected.");
+// 			break;
+// 		default:
+// 			sr_err("Unable to claim interface: %s.",
+// 			       libusb_error_name(ret));
+// 			break;
+// 		}
+// 
+// 		return SR_ERR;
+// 	}
+// 
+// 
+// 	if ((ret = dslogic_fpga_firmware_upload(sdi)) != SR_OK)
+// 		return ret;
+// 
+// 	if (devc->cur_samplerate == 0) {
+// 		/* Samplerate hasn't been set; default to the slowest one. */
+// 		devc->cur_samplerate = devc->samplerates[0];
+// 	}
+// 
+// 	if (devc->cur_threshold == 0.0) {
+// 		devc->cur_threshold = thresholds[1][0];
+// 		return dslogic_set_voltage_threshold(sdi, devc->cur_threshold);
+// 	}
+
 
 	return SR_OK;
 }

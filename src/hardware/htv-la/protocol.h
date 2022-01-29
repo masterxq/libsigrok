@@ -37,4 +37,6 @@ enum dslogic_edge_modes {
 
 SR_PRIV int htv_la_receive_data(int fd, int revents, void *cb_data);
 
+void htv_la_open_dev(void);
+
 #endif
