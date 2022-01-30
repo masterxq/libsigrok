@@ -39,4 +39,10 @@ SR_PRIV int htv_la_receive_data(int fd, int revents, void *cb_data);
 
 void htv_la_open_dev(void);
 
+typedef struct htv_la_settings_t
+{
+	uint64_t sample_rate;
+	uint64_t capture_ratio;
+} htv_la_settings_t;
+
 #endif

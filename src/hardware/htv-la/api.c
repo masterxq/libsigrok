@@ -34,14 +34,14 @@ static const uint32_t drvopts[] = {
 
 static const uint32_t devopts[] = {
 	SR_CONF_CONTINUOUS | SR_CONF_SET | SR_CONF_GET,
-	SR_CONF_LIMIT_SAMPLES | SR_CONF_GET | SR_CONF_SET,
-	SR_CONF_VOLTAGE_THRESHOLD | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
-	SR_CONF_CONN | SR_CONF_GET,
+// 	SR_CONF_LIMIT_SAMPLES | SR_CONF_GET | SR_CONF_SET,
+// 	SR_CONF_VOLTAGE_THRESHOLD | SR_CONF_LIST,
+// 	SR_CONF_CONN | SR_CONF_GET,
 	SR_CONF_SAMPLERATE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
-	SR_CONF_TRIGGER_MATCH | SR_CONF_LIST,
+// 	SR_CONF_TRIGGER_MATCH | SR_CONF_LIST,
 	SR_CONF_CAPTURE_RATIO | SR_CONF_GET | SR_CONF_SET,
-	SR_CONF_EXTERNAL_CLOCK | SR_CONF_GET | SR_CONF_SET,
-	SR_CONF_CLOCK_EDGE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
+// 	SR_CONF_EXTERNAL_CLOCK | SR_CONF_GET | SR_CONF_SET,
+// 	SR_CONF_CLOCK_EDGE | SR_CONF_GET | SR_CONF_SET | SR_CONF_LIST,
 };
 
 static const int32_t trigger_matches[] = {
@@ -58,23 +58,42 @@ static const char *signal_edges[] = {
 };
 
 
-static const uint64_t samplerates[] = {
-	SR_KHZ(10),
-	SR_KHZ(20),
-	SR_KHZ(50),
-	SR_KHZ(100),
-	SR_KHZ(200),
-	SR_KHZ(500),
-	SR_MHZ(1),
-	SR_MHZ(2),
-	SR_MHZ(5),
-	SR_MHZ(10),
-	SR_MHZ(20),
-	SR_MHZ(25),
-	SR_MHZ(50),
-	SR_MHZ(100),
-	SR_MHZ(200),
-	SR_MHZ(400),
+static const uint64_t samplerates[3][11] =
+{
+	{
+		SR_KHZ(10),
+		SR_KHZ(50),
+		SR_KHZ(100),
+		SR_KHZ(200),
+		SR_KHZ(500),
+		SR_MHZ(1),
+		SR_MHZ(2),
+		SR_MHZ(5),
+		SR_MHZ(10),
+		SR_MHZ(20),
+		SR_MHZ(25),
+	},
+	{
+		SR_MHZ(50),
+	},
+	{
+		SR_MHZ(75),
+		SR_MHZ(100),
+	}
+};
+
+static const uint8_t samplerates_num_by_channel_group[3] =
+{
+	11,
+	1,
+	2
+};
+
+static const uint8_t channel_num_by_channel_group[3] =
+{
+	16,
+	8,
+	4
 };
 
 static GSList *scan(struct sr_dev_driver *di, GSList *options)
@@ -156,16 +175,21 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 			printf("serial: %s, manufacturer: %s, product: %s, connection_id: %s\n", serial_num, manufacturer, product, connection_id);
 			
 			//Collect all channel TODO: make it correct
-			cg = g_malloc0(sizeof(struct sr_channel_group));
-			cg->name = g_strdup("Logic");
-			cg->channels = NULL;
-			for (int j = 0; j < 16; j++)
+			sdi->channel_groups = NULL;
+			for(uint8_t i = 0; i < 3; i++)
 			{
-				sprintf(channel_name, "%d", j);
-				ch = sr_channel_new(sdi, j, SR_CHANNEL_LOGIC, TRUE, channel_name);
-				cg->channels = g_slist_append(cg->channels, ch);
+				cg = g_malloc0(sizeof(struct sr_channel_group));
+				cg->name = g_strdup("A");
+				cg->name[0] = 'A' + i;
+				cg->channels = NULL;
+				for(int j = 0; j < channel_num_by_channel_group[i]; j++)
+				{
+					sprintf(channel_name, "%d", j);
+					ch = sr_channel_new(sdi, j, SR_CHANNEL_LOGIC, TRUE, channel_name);
+					cg->channels = g_slist_append(cg->channels, ch);
+				}
+				sdi->channel_groups = g_slist_append(sdi->channel_groups, cg);
 			}
-			sdi->channel_groups = g_slist_append(NULL, cg);
 			
 			//Have user data
 			sdi->priv = NULL;
@@ -184,62 +208,6 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 	
 	libusb_free_device_list(devlist, 1);
 
-
-
-// 		sdi = g_malloc0(sizeof(struct sr_dev_inst));
-// 		sdi->status = SR_ST_INITIALIZING;
-// 		sdi->vendor = g_strdup(prof->vendor);
-// 		sdi->model = g_strdup(prof->model);
-// 		sdi->version = g_strdup(prof->model_version);
-// 		sdi->serial_num = g_strdup(serial_num);
-// 		sdi->connection_id = g_strdup(connection_id);
-
-// 		/* Logic channels, all in one channel group. */
-// 		cg = g_malloc0(sizeof(struct sr_channel_group));
-// 		cg->name = g_strdup("Logic");
-// 		for (j = 0; j < NUM_CHANNELS; j++) {
-// 			sprintf(channel_name, "%d", j);
-// 			ch = sr_channel_new(sdi, j, SR_CHANNEL_LOGIC,
-// 						TRUE, channel_name);
-// 			cg->channels = g_slist_append(cg->channels, ch);
-// 		}
-// 		sdi->channel_groups = g_slist_append(NULL, cg);
-
-// 		devc = dslogic_dev_new();
-// 		devc->profile = prof;
-// 		sdi->priv = devc;
-// 		devices = g_slist_append(devices, sdi);
-// 
-// 		devc->samplerates = samplerates;
-// 		devc->num_samplerates = ARRAY_SIZE(samplerates);
-// 		has_firmware = usb_match_manuf_prod(devlist[i], "DreamSourceLab", "USB-based Instrument");
-// 
-// 		if (has_firmware) {
-// 			/* Already has the firmware, so fix the new address. */
-// 			sr_dbg("Found a DSLogic device.");
-// 			sdi->status = SR_ST_INACTIVE;
-// 			sdi->inst_type = SR_INST_USB;
-// 			sdi->conn = sr_usb_dev_inst_new(libusb_get_bus_number(devlist[i]),
-// 					libusb_get_device_address(devlist[i]), NULL);
-// 		} else {
-// 			if (ezusb_upload_firmware(drvc->sr_ctx, devlist[i],
-// 					USB_CONFIGURATION, prof->firmware) == SR_OK) {
-// 				/* Store when this device's FW was updated. */
-// 				devc->fw_updated = g_get_monotonic_time();
-// 			} else {
-// 				sr_err("Firmware upload failed for "
-// 				       "device %d.%d (logical), name %s.",
-// 				       libusb_get_bus_number(devlist[i]),
-// 				       libusb_get_device_address(devlist[i]),
-// 				       prof->firmware);
-// 			}
-// 			sdi->inst_type = SR_INST_USB;
-// 			sdi->conn = sr_usb_dev_inst_new(libusb_get_bus_number(devlist[i]),
-// 					0xff, NULL);
-// 		}
-// 	}
-// 	libusb_free_device_list(devlist, 1);
-// 	g_slist_free_full(conn_devices, (GDestroyNotify)sr_usb_dev_inst_free);
 
 	return std_scan_complete(di, devices);
 }
@@ -330,7 +298,9 @@ static int dev_open(struct sr_dev_inst *sdi)
 		}
 	}
 
-
+	//Lets check what we need to do here
+	sdi->priv = g_malloc0(sizeof(htv_la_settings_t));
+	sr_err("Device open");
 	return SR_OK;
 }
 
@@ -351,19 +321,45 @@ static int config_get(uint32_t key, GVariant **data,
 	sr_err("get htv\n");
 	int ret;
 
-	(void)sdi;
 	(void)data;
 	(void)cg;
-
+	struct sr_usb_dev_inst *usb = sdi->conn;
 	
-	ret = SR_OK;
+	if (!sdi)
+		return SR_ERR_ARG;
+
 	switch (key) {
-	/* TODO */
+	case SR_CONF_CONN:
+		if (!sdi->conn)
+			return SR_ERR_ARG;
+		*data = g_variant_new_printf("%d.%d", usb->bus, usb->address);
+		break;
+	case SR_CONF_VOLTAGE_THRESHOLD:
+			*data = std_gvar_tuple_double(1.5, 1.9);
+		break;
+	case SR_CONF_LIMIT_SAMPLES:
+		*data = g_variant_new_uint64(64);
+		break;
+	case SR_CONF_SAMPLERATE:
+		*data = g_variant_new_uint64(SR_MHZ(100));
+		break;
+// 	case SR_CONF_CAPTURE_RATIO:
+// 		*data = g_variant_new_uint64(devc->capture_ratio);
+		break;
+	case SR_CONF_EXTERNAL_CLOCK:
+		*data = g_variant_new_boolean(TRUE);
+		break;
+	case SR_CONF_CONTINUOUS:
+		*data = g_variant_new_boolean(TRUE);
+		break;
+	case SR_CONF_CLOCK_EDGE:
+		*data = g_variant_new_string(signal_edges[0]);
+		break;
 	default:
 		return SR_ERR_NA;
 	}
 
-	return ret;
+	return SR_OK;
 }
 
 static int config_set(uint32_t key, GVariant *data,
@@ -371,16 +367,36 @@ static int config_set(uint32_t key, GVariant *data,
 {
 	sr_err("set htv\n");
 	int ret;
-
+	
+	htv_la_settings_t *settings = sdi->priv;;
+	uint64_t tmp_u64;
+	int index;
 	(void)sdi;
 	(void)data;
 	(void)cg;
 
 	ret = SR_OK;
 	switch (key) {
-	/* TODO */
-	default:
-		ret = SR_ERR_NA;
+		case SR_CONF_SAMPLERATE:
+			index = std_u64_idx(data, samplerates, ARRAY_SIZE(samplerates));
+			if(index < 0)
+				return SR_ERR_ARG;
+			settings->sample_rate = samplerates[index];
+			break;
+		case SR_CONF_CAPTURE_RATIO:
+			settings->capture_ratio = g_variant_get_uint64(data);
+			break;
+
+		case SR_CONF_CONTINUOUS:
+// 			devc->continuous_mode = g_variant_get_boolean(data);
+			break;
+// 		case SR_CONF_CLOCK_EDGE:
+// 			if ((idx = std_str_idx(data, ARRAY_AND_SIZE(signal_edges))) < 0)
+// 				return SR_ERR_ARG;
+// 			devc->clock_edge = idx;
+// 			break;
+		default:
+			ret = SR_ERR_NA;
 	}
 
 	return ret;
@@ -392,18 +408,30 @@ static int config_list(uint32_t key, GVariant **data,
 	struct dev_context *devc;
 
 	devc = (sdi) ? sdi->priv : NULL;
+	
+
 
 	switch (key) {
 	case SR_CONF_SCAN_OPTIONS:
 	case SR_CONF_DEVICE_OPTIONS:
 		return STD_CONFIG_LIST(key, data, sdi, cg, scanopts, drvopts, devopts);
 	case SR_CONF_VOLTAGE_THRESHOLD:
-		*data = std_gvar_min_max_step_thresholds(0.0, 5.0, 0.1);
+		*data = std_gvar_tuple_double(1.5, 1.9);
 		break;
 	case SR_CONF_SAMPLERATE:
 		if (!devc)
 			return SR_ERR_ARG;
-		*data = std_gvar_samplerates(samplerates, sizeof(samplerates)/sizeof(uint64_t));
+		if(!cg)
+			return SR_ERR_CHANNEL_GROUP;
+		
+		int8_t channel_group_num = cg->name[0] - 'A';
+		if(channel_group_num < 0 || channel_group_num >= 3)
+		{
+			sr_err("Bad channel group: %s", cg->name);
+			return SR_ERR_CHANNEL_GROUP;
+		}
+		sr_err("have channel group");
+		*data = std_gvar_samplerates(samplerates[channel_group_num], samplerates_num_by_channel_group[channel_group_num]);
 		break;
 	case SR_CONF_TRIGGER_MATCH:
 		*data = std_gvar_array_i32(ARRAY_AND_SIZE(trigger_matches));
