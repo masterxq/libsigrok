@@ -27,6 +27,10 @@
 
 #define LOG_PREFIX "htv-la"
 
+#define HTV_LA_SET_SAMPLE_RATE 0xC1
+#define HTV_LA_ACQUISITION_START 0xC5
+#define HTV_LA_ACQUISITION_STOP 0xC6
+
 struct dev_context {
 };
 

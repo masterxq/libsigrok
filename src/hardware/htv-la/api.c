@@ -58,43 +58,41 @@ static const char *signal_edges[] = {
 };
 
 
-static const uint64_t samplerates[3][11] =
+static const uint64_t samplerates[] =
 {
+	SR_KHZ(10),
+	SR_KHZ(20),
+	SR_KHZ(50),
+	SR_KHZ(100),
+	SR_KHZ(200),
+	SR_KHZ(500),
+	SR_MHZ(1),
+	SR_MHZ(2),
+	SR_MHZ(5),
+	SR_MHZ(10),
+	SR_MHZ(20),
+	SR_MHZ(25),
+	SR_MHZ(50),
+	SR_MHZ(75),
+	SR_MHZ(100),
+};
+
+void *alloc_channel_list(uint8_t num, struct sr_dev_inst *sdi)
+{
+	struct sr_channel_group *cg;
+	struct sr_channel *ch;
+	char channel_name[16];
+	cg = g_malloc0(sizeof(struct sr_channel_group));
+	cg->name = g_strdup("Logic");
+	cg->channels = NULL;
+	for (int j = 0; j < num; j++)
 	{
-		SR_KHZ(10),
-		SR_KHZ(50),
-		SR_KHZ(100),
-		SR_KHZ(200),
-		SR_KHZ(500),
-		SR_MHZ(1),
-		SR_MHZ(2),
-		SR_MHZ(5),
-		SR_MHZ(10),
-		SR_MHZ(20),
-		SR_MHZ(25),
-	},
-	{
-		SR_MHZ(50),
-	},
-	{
-		SR_MHZ(75),
-		SR_MHZ(100),
+		sprintf(channel_name, "%d", j);
+		ch = sr_channel_new(sdi, j, SR_CHANNEL_LOGIC, TRUE, channel_name);
+		cg->channels = g_slist_append(cg->channels, ch);
 	}
-};
-
-static const uint8_t samplerates_num_by_channel_group[3] =
-{
-	11,
-	1,
-	2
-};
-
-static const uint8_t channel_num_by_channel_group[3] =
-{
-	16,
-	8,
-	4
-};
+	return cg;
+}
 
 static GSList *scan(struct sr_dev_driver *di, GSList *options)
 {
@@ -102,8 +100,7 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 // 	struct dev_context *devc;
 	struct sr_dev_inst *sdi;
 // 	struct sr_usb_dev_inst *usb;
-	struct sr_channel *ch;
-	struct sr_channel_group *cg;
+	
 	struct sr_config *src;
 // 	const struct dslogic_profile *prof;
 	GSList *l, *devices/*, *conn_devices*/;
@@ -112,7 +109,7 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 	struct libusb_device_handle *dev_handle;
 	const char *conn;
 	char manufacturer[64], product[64], serial_num[64], connection_id[64];
-	char channel_name[16];
+	
 
 	drvc = di->context;
 
@@ -175,21 +172,8 @@ static GSList *scan(struct sr_dev_driver *di, GSList *options)
 			printf("serial: %s, manufacturer: %s, product: %s, connection_id: %s\n", serial_num, manufacturer, product, connection_id);
 			
 			//Collect all channel TODO: make it correct
-			sdi->channel_groups = NULL;
-			for(uint8_t i = 0; i < 3; i++)
-			{
-				cg = g_malloc0(sizeof(struct sr_channel_group));
-				cg->name = g_strdup("A");
-				cg->name[0] = 'A' + i;
-				cg->channels = NULL;
-				for(int j = 0; j < channel_num_by_channel_group[i]; j++)
-				{
-					sprintf(channel_name, "%d", j);
-					ch = sr_channel_new(sdi, j, SR_CHANNEL_LOGIC, TRUE, channel_name);
-					cg->channels = g_slist_append(cg->channels, ch);
-				}
-				sdi->channel_groups = g_slist_append(sdi->channel_groups, cg);
-			}
+
+			sdi->channel_groups = g_slist_append(NULL, alloc_channel_list(16, sdi));
 			
 			//Have user data
 			sdi->priv = NULL;
@@ -369,9 +353,8 @@ static int config_set(uint32_t key, GVariant *data,
 	int ret;
 	
 	htv_la_settings_t *settings = sdi->priv;;
-	uint64_t tmp_u64;
 	int index;
-	(void)sdi;
+	struct sr_usb_dev_inst *usb = sdi->conn;
 	(void)data;
 	(void)cg;
 
@@ -382,6 +365,16 @@ static int config_set(uint32_t key, GVariant *data,
 			if(index < 0)
 				return SR_ERR_ARG;
 			settings->sample_rate = samplerates[index];
+			if(settings->sample_rate == SR_KHZ(20))
+			{
+					int r = libusb_control_transfer(usb->devhdl, LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_ENDPOINT_OUT, HTV_LA_SET_SAMPLE_RATE, 0, 0, (unsigned char *)&settings->sample_rate, 8, 200);
+					if(r != 8)
+					{
+						sr_err("Failed to set samplerate");
+						return SR_ERR;
+					}
+			}
+
 			break;
 		case SR_CONF_CAPTURE_RATIO:
 			settings->capture_ratio = g_variant_get_uint64(data);
@@ -405,11 +398,10 @@ static int config_set(uint32_t key, GVariant *data,
 static int config_list(uint32_t key, GVariant **data,
 	const struct sr_dev_inst *sdi, const struct sr_channel_group *cg)
 {
+	sr_err("get list");
 	struct dev_context *devc;
 
 	devc = (sdi) ? sdi->priv : NULL;
-	
-
 
 	switch (key) {
 	case SR_CONF_SCAN_OPTIONS:
@@ -421,17 +413,7 @@ static int config_list(uint32_t key, GVariant **data,
 	case SR_CONF_SAMPLERATE:
 		if (!devc)
 			return SR_ERR_ARG;
-		if(!cg)
-			return SR_ERR_CHANNEL_GROUP;
-		
-		int8_t channel_group_num = cg->name[0] - 'A';
-		if(channel_group_num < 0 || channel_group_num >= 3)
-		{
-			sr_err("Bad channel group: %s", cg->name);
-			return SR_ERR_CHANNEL_GROUP;
-		}
-		sr_err("have channel group");
-		*data = std_gvar_samplerates(samplerates[channel_group_num], samplerates_num_by_channel_group[channel_group_num]);
+		*data = std_gvar_samplerates(samplerates, sizeof(samplerates)/sizeof(uint64_t));
 		break;
 	case SR_CONF_TRIGGER_MATCH:
 		*data = std_gvar_array_i32(ARRAY_AND_SIZE(trigger_matches));
